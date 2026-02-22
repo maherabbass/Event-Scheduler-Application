@@ -8,6 +8,13 @@ import EventDetail from './pages/EventDetail'
 import EventsList from './pages/EventsList'
 import Login from './pages/Login'
 
+function RequireAuth({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, loading } = useAuth()
+  if (loading) return <div className="loading-center"><div className="spinner" /></div>
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  return <>{children}</>
+}
+
 function RequireOrganizer({ children }: { children: React.ReactNode }) {
   const { canManageEvents, isAdmin, loading } = useAuth()
   if (loading) return <div className="loading-center"><div className="spinner" /></div>
@@ -44,9 +51,9 @@ export default function App() {
           />
           <Route path="/auth/callback" element={<AuthCallback />} />
 
-          {/* Public event list and detail */}
-          <Route path="/events" element={<EventsList />} />
-          <Route path="/events/:id" element={<EventDetail />} />
+          {/* Authenticated: event list and detail */}
+          <Route path="/events" element={<RequireAuth><EventsList /></RequireAuth>} />
+          <Route path="/events/:id" element={<RequireAuth><EventDetail /></RequireAuth>} />
 
           {/* Organizer/Admin: create and edit */}
           <Route
@@ -76,8 +83,8 @@ export default function App() {
             }
           />
 
-          <Route path="/" element={<Navigate to="/events" replace />} />
-          <Route path="*" element={<Navigate to="/events" replace />} />
+          <Route path="/" element={<Navigate to={isAuthenticated ? "/events" : "/login"} replace />} />
+          <Route path="*" element={<Navigate to={isAuthenticated ? "/events" : "/login"} replace />} />
         </Routes>
       </main>
     </div>

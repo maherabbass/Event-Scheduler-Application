@@ -22,9 +22,7 @@ depends_on: Union[str, Sequence[str], None] = None
 # CREATE TYPE.  We create the types ourselves below using PL/pgSQL that
 # silently ignores duplicate_object errors, making the migration idempotent.
 userrole_enum = PG_ENUM("ADMIN", "ORGANIZER", "MEMBER", name="userrole", create_type=False)
-eventstatus_enum = PG_ENUM(
-    "DRAFT", "PUBLISHED", "CANCELLED", name="eventstatus", create_type=False
-)
+eventstatus_enum = PG_ENUM("DRAFT", "PUBLISHED", "CANCELLED", name="eventstatus", create_type=False)
 rsvpstatus_enum = PG_ENUM(
     "UPCOMING", "ATTENDING", "MAYBE", "DECLINED", name="rsvpstatus", create_type=False
 )
@@ -33,30 +31,24 @@ rsvpstatus_enum = PG_ENUM(
 def upgrade() -> None:
     # Create enum types idempotently — PL/pgSQL swallows duplicate_object so
     # re-running the migration after a partial failure is safe.
-    op.execute(
-        """
+    op.execute("""
         DO $$ BEGIN
             CREATE TYPE userrole AS ENUM ('ADMIN', 'ORGANIZER', 'MEMBER');
         EXCEPTION WHEN duplicate_object THEN NULL;
         END $$
-        """
-    )
-    op.execute(
-        """
+        """)
+    op.execute("""
         DO $$ BEGIN
             CREATE TYPE eventstatus AS ENUM ('DRAFT', 'PUBLISHED', 'CANCELLED');
         EXCEPTION WHEN duplicate_object THEN NULL;
         END $$
-        """
-    )
-    op.execute(
-        """
+        """)
+    op.execute("""
         DO $$ BEGIN
             CREATE TYPE rsvpstatus AS ENUM ('UPCOMING', 'ATTENDING', 'MAYBE', 'DECLINED');
         EXCEPTION WHEN duplicate_object THEN NULL;
         END $$
-        """
-    )
+        """)
 
     # users table
     op.create_table(

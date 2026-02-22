@@ -7,12 +7,12 @@ on:
     branches: [main]
 
 env:
-  PROJECT_ID: event-scheduler-project
+  PROJECT_ID: event-scheduler-488
   REGION: europe-west1
   SERVICE_NAME: event-scheduler-api
   AR_REGISTRY: europe-west1-docker.pkg.dev
   AR_REPOSITORY: event-scheduler
-  CLOUD_SQL_INSTANCE: event-scheduler-project:europe-west1:event-scheduler-postgres
+  CLOUD_SQL_INSTANCE: event-scheduler-488:europe-west1:event-scheduler-postgres
   MIGRATION_JOB: event-scheduler-migrate
 
 jobs:

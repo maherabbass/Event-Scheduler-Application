@@ -1,3 +1,9 @@
+import hashlib
+import hmac
+import secrets
+import time
+
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +26,45 @@ _AUTH_ERROR_RESPONSES: dict = {
     503: {"description": "OAuth provider is not configured on this server."},
 }
 
+# ---------------------------------------------------------------------------
+# Stateless HMAC-signed OAuth state
+# Eliminates the session-cookie dependency that fails on Cloud Run when
+# the browser doesn't send the session cookie back on the OAuth redirect.
+# ---------------------------------------------------------------------------
+
+_STATE_SEP = "."
+
+
+def _make_signed_state() -> str:
+    """Return a self-verifiable state token: '{nonce}.{ts}.{hmac}'."""
+    nonce = secrets.token_hex(16)
+    ts = str(int(time.time()))
+    raw = f"{nonce}{_STATE_SEP}{ts}"
+    sig = hmac.new(settings.SECRET_KEY.encode(), raw.encode(), hashlib.sha256).hexdigest()
+    return f"{raw}{_STATE_SEP}{sig}"
+
+
+def _verify_signed_state(state: str, max_age: int = 600) -> bool:
+    """Return True only if the state was issued by us and is not expired."""
+    try:
+        # state = nonce.ts.sig  — split from the right to keep nonce intact
+        parts = state.rsplit(_STATE_SEP, 1)
+        if len(parts) != 2:
+            return False
+        raw, sig = parts
+        expected = hmac.new(
+            settings.SECRET_KEY.encode(), raw.encode(), hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(sig, expected):
+            return False
+        # raw = nonce.ts
+        ts_str = raw.rsplit(_STATE_SEP, 1)[-1]
+        if int(time.time()) - int(ts_str) > max_age:
+            return False
+        return True
+    except Exception:
+        return False
+
 
 @router.get(
     "/login/{provider}",
@@ -35,9 +80,13 @@ async def login(provider: str, request: Request) -> None:
             status_code=503,
             detail=f"Provider '{provider}' is not configured on this server",
         )
+    state = _make_signed_state()
     redirect_uri = f"{settings.BACKEND_URL}/api/v1/auth/callback/{provider}"
     client = oauth.create_client(provider)
-    return await client.authorize_redirect(request, redirect_uri)
+    # authorize_redirect also stores state in the session cookie.  That still
+    # works when cookies are available (local dev); on Cloud Run we fall back
+    # to the HMAC check in the callback.
+    return await client.authorize_redirect(request, redirect_uri, state=state)
 
 
 @router.get(
@@ -62,37 +111,99 @@ async def callback(
             detail=f"Provider '{provider}' is not configured on this server",
         )
 
-    client = oauth.create_client(provider)
-    token = await client.authorize_access_token(request)
+    # --- 1. Validate state (HMAC, no session required) ---------------------
+    state = request.query_params.get("state", "")
+    if not _verify_signed_state(state):
+        raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
 
-    if provider == "google":
-        userinfo = token.get("userinfo") or await client.userinfo(token=token)
-        email: str = userinfo["email"]
-        name: str = userinfo.get("name") or email.split("@")[0]
-        subject: str = userinfo["sub"]
-    else:  # github
-        resp = await client.get("user", token=token)
-        resp.raise_for_status()
-        profile = resp.json()
-        subject = str(profile["id"])
-        name = profile.get("name") or profile.get("login") or "GitHub User"
-        email = profile.get("email") or ""
-        if not email:
-            emails_resp = await client.get("user/emails", token=token)
-            emails_resp.raise_for_status()
-            emails = emails_resp.json()
-            primary = next(
-                (e["email"] for e in emails if e.get("primary") and e.get("verified")),
-                None,
+    code = request.query_params.get("code")
+    if not code:
+        raise HTTPException(status_code=400, detail="Missing authorization code")
+
+    redirect_uri = f"{settings.BACKEND_URL}/api/v1/auth/callback/{provider}"
+
+    # --- 2. Exchange code for token + fetch user info (direct httpx calls) -
+    # Bypasses authlib's session-based state check entirely.
+    async with httpx.AsyncClient() as http:
+        if provider == "google":
+            token_resp = await http.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "code": code,
+                    "client_id": settings.GOOGLE_CLIENT_ID,
+                    "client_secret": settings.GOOGLE_CLIENT_SECRET,
+                    "redirect_uri": redirect_uri,
+                    "grant_type": "authorization_code",
+                },
             )
-            if primary is None:
-                primary = next((e["email"] for e in emails if e.get("verified")), None)
-            if primary is None:
-                raise HTTPException(
-                    status_code=400,
-                    detail="No verified email found in GitHub account",
+            if token_resp.status_code != 200:
+                raise HTTPException(status_code=400, detail="Token exchange failed")
+            token_data = token_resp.json()
+
+            userinfo_resp = await http.get(
+                "https://www.googleapis.com/oauth2/v3/userinfo",
+                headers={"Authorization": f"Bearer {token_data['access_token']}"},
+            )
+            if userinfo_resp.status_code != 200:
+                raise HTTPException(status_code=400, detail="Failed to fetch user info")
+            userinfo = userinfo_resp.json()
+
+            email: str = userinfo["email"]
+            name: str = userinfo.get("name") or email.split("@")[0]
+            subject: str = userinfo["sub"]
+
+        else:  # github
+            token_resp = await http.post(
+                "https://github.com/login/oauth/access_token",
+                data={
+                    "code": code,
+                    "client_id": settings.GITHUB_CLIENT_ID,
+                    "client_secret": settings.GITHUB_CLIENT_SECRET,
+                    "redirect_uri": redirect_uri,
+                },
+                headers={"Accept": "application/json"},
+            )
+            if token_resp.status_code != 200:
+                raise HTTPException(status_code=400, detail="Token exchange failed")
+            gh_token = token_resp.json().get("access_token", "")
+            if not gh_token:
+                raise HTTPException(status_code=400, detail="Token exchange failed")
+
+            profile_resp = await http.get(
+                "https://api.github.com/user",
+                headers={"Authorization": f"token {gh_token}", "Accept": "application/json"},
+            )
+            profile_resp.raise_for_status()
+            profile = profile_resp.json()
+
+            subject = str(profile["id"])
+            name = profile.get("name") or profile.get("login") or "GitHub User"
+            email = profile.get("email") or ""
+
+            if not email:
+                emails_resp = await http.get(
+                    "https://api.github.com/user/emails",
+                    headers={
+                        "Authorization": f"token {gh_token}",
+                        "Accept": "application/json",
+                    },
                 )
-            email = primary
+                emails_resp.raise_for_status()
+                emails = emails_resp.json()
+                primary = next(
+                    (e["email"] for e in emails if e.get("primary") and e.get("verified")),
+                    None,
+                )
+                if primary is None:
+                    primary = next(
+                        (e["email"] for e in emails if e.get("verified")), None
+                    )
+                if primary is None:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="No verified email found in GitHub account",
+                    )
+                email = primary
 
     user = await get_or_create_user(db, email=email, name=name, provider=provider, subject=subject)
     access_token = create_access_token({"sub": str(user.id)})

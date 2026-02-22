@@ -17,10 +17,13 @@ down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-# Define enums explicitly so they are created/dropped properly
-userrole_enum = sa.Enum("ADMIN", "ORGANIZER", "MEMBER", name="userrole")
-eventstatus_enum = sa.Enum("DRAFT", "PUBLISHED", "CANCELLED", name="eventstatus")
-rsvpstatus_enum = sa.Enum("UPCOMING", "ATTENDING", "MAYBE", "DECLINED", name="rsvpstatus")
+# create_type=False prevents op.create_table from auto-creating the enum a
+# second time; we manage creation/deletion explicitly below with checkfirst=True.
+userrole_enum = sa.Enum("ADMIN", "ORGANIZER", "MEMBER", name="userrole", create_type=False)
+eventstatus_enum = sa.Enum("DRAFT", "PUBLISHED", "CANCELLED", name="eventstatus", create_type=False)
+rsvpstatus_enum = sa.Enum(
+    "UPCOMING", "ATTENDING", "MAYBE", "DECLINED", name="rsvpstatus", create_type=False
+)
 
 
 def upgrade() -> None:

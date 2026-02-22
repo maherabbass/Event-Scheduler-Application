@@ -1,0 +1,149 @@
+name: CI / CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  PROJECT_ID: event-scheduler-project
+  REGION: europe-west1
+  SERVICE_NAME: event-scheduler-api
+  AR_REGISTRY: europe-west1-docker.pkg.dev
+  AR_REPOSITORY: event-scheduler
+  CLOUD_SQL_INSTANCE: event-scheduler-project:europe-west1:event-scheduler-postgres
+  MIGRATION_JOB: event-scheduler-migrate
+
+jobs:
+  test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+      - name: Lint (ruff)
+        run: ruff check .
+      - name: Format check (black)
+        run: black --check .
+      - name: Run tests
+        run: pytest
+        env:
+          SECRET_KEY: ci-test-secret-key
+
+  deploy:
+    name: Build & Deploy
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.AR_REGISTRY }} --quiet
+      - name: Build and push Docker image
+        id: build
+        run: |
+          IMAGE="${{ env.AR_REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.AR_REPOSITORY }}/${{ env.SERVICE_NAME }}:${{ github.sha }}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+      - name: Run database migrations (Cloud Run Job)
+        env:
+          DB_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          IMAGE="${{ steps.build.outputs.image }}"
+          JOB="${{ env.MIGRATION_JOB }}"
+          REGION="${{ env.REGION }}"
+          PROJECT="${{ env.PROJECT_ID }}"
+          SQL_INST="${{ env.CLOUD_SQL_INSTANCE }}"
+
+          if gcloud run jobs describe "$JOB" \
+               --region="$REGION" --project="$PROJECT" 2>/dev/null; then
+            gcloud run jobs update "$JOB" \
+              --image="$IMAGE" \
+              --region="$REGION" \
+              --project="$PROJECT" \
+              --command="alembic" \
+              --args="upgrade,head" \
+              --set-env-vars="DATABASE_URL=${DB_URL}" \
+              --set-cloudsql-instances="$SQL_INST" \
+              --max-retries=0 \
+              --task-timeout=5m
+          else
+            gcloud run jobs create "$JOB" \
+              --image="$IMAGE" \
+              --region="$REGION" \
+              --project="$PROJECT" \
+              --command="alembic" \
+              --args="upgrade,head" \
+              --set-env-vars="DATABASE_URL=${DB_URL}" \
+              --set-cloudsql-instances="$SQL_INST" \
+              --max-retries=0 \
+              --task-timeout=5m
+          fi
+
+          gcloud run jobs execute "$JOB" \
+            --region="$REGION" \
+            --project="$PROJECT" \
+            --wait
+      - name: Deploy to Cloud Run
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GH_CLIENT_ID: ${{ secrets.GH_CLIENT_ID }}
+          GH_CLIENT_SECRET: ${{ secrets.GH_CLIENT_SECRET }}
+          FRONTEND_URL: ${{ secrets.FRONTEND_URL }}
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          EXTRA_CORS_ORIGINS: ${{ secrets.EXTRA_CORS_ORIGINS }}
+          CORS_ORIGIN_REGEX: ${{ secrets.CORS_ORIGIN_REGEX }}
+        run: |
+          CLOUD_RUN_ENV="APP_ENV=production"
+          CLOUD_RUN_ENV="${CLOUD_RUN_ENV}|DATABASE_URL=${DATABASE_URL}"
+          CLOUD_RUN_ENV="${CLOUD_RUN_ENV}|SECRET_KEY=${SECRET_KEY}"
+          CLOUD_RUN_ENV="${CLOUD_RUN_ENV}|GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}"
+          CLOUD_RUN_ENV="${CLOUD_RUN_ENV}|GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}"
+          CLOUD_RUN_ENV="${CLOUD_RUN_ENV}|GITHUB_CLIENT_ID=${GH_CLIENT_ID}"
+          CLOUD_RUN_ENV="${CLOUD_RUN_ENV}|GITHUB_CLIENT_SECRET=${GH_CLIENT_SECRET}"
+          CLOUD_RUN_ENV="${CLOUD_RUN_ENV}|FRONTEND_URL=${FRONTEND_URL}"
+          CLOUD_RUN_ENV="${CLOUD_RUN_ENV}|BACKEND_URL=${BACKEND_URL}"
+          CLOUD_RUN_ENV="${CLOUD_RUN_ENV}|EXTRA_CORS_ORIGINS=${EXTRA_CORS_ORIGINS}"
+          CLOUD_RUN_ENV="${CLOUD_RUN_ENV}|CORS_ORIGIN_REGEX=${CORS_ORIGIN_REGEX}"
+          CLOUD_RUN_ENV="${CLOUD_RUN_ENV}|AI_PROVIDER=openai"
+          CLOUD_RUN_ENV="${CLOUD_RUN_ENV}|OPENAI_API_KEY=${OPENAI_API_KEY}"
+          CLOUD_RUN_ENV="${CLOUD_RUN_ENV}|OPENAI_MODEL=gpt-4o-mini"
+
+          gcloud run deploy "${{ env.SERVICE_NAME }}" \
+            --image="${{ steps.build.outputs.image }}" \
+            --region="${{ env.REGION }}" \
+            --project="${{ env.PROJECT_ID }}" \
+            --platform=managed \
+            --allow-unauthenticated \
+            --add-cloudsql-instances="${{ env.CLOUD_SQL_INSTANCE }}" \
+            --set-env-vars="^|^${CLOUD_RUN_ENV}" \
+            --min-instances=0 \
+            --max-instances=3 \
+            --timeout=60
+      - name: Print deployed URL
+        run: |
+          gcloud run services describe "${{ env.SERVICE_NAME }}" \
+            --region="${{ env.REGION }}" \
+            --project="${{ env.PROJECT_ID }}" \
+            --format="value(status.url)"

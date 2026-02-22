@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.event_attendee import EventAttendee, RSVPStatus
 from app.models.invitation import Invitation
-from app.schemas.invitation import InvitationResponse
 
 
 async def create_invitation(

@@ -247,7 +247,11 @@ async def seed() -> None:
             (alice, published_events[4], RSVPStatus.MAYBE),
             (bob, published_events[1], RSVPStatus.ATTENDING),
             (bob, published_events[5], RSVPStatus.ATTENDING),
-            (bob, published_events[6] if len(published_events) > 6 else published_events[0], RSVPStatus.MAYBE),
+            (
+                bob,
+                published_events[6] if len(published_events) > 6 else published_events[0],
+                RSVPStatus.MAYBE,
+            ),
         ]
 
         for user, event, rsvp_status in rsvp_assignments:

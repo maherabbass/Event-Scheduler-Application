@@ -13,7 +13,6 @@ from pydantic import ValidationError
 
 from app.schemas.event import EventCreate, EventUpdate
 
-
 # ---------------------------------------------------------------------------
 # Schema-only tests (no DB required)
 # ---------------------------------------------------------------------------

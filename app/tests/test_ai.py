@@ -165,9 +165,7 @@ async def test_ai_suggest_fallback_when_no_openai_key(organizer_client: AsyncCli
     """Endpoint returns 200 with suggestions even when no OpenAI key is set."""
     event = _make_event()
 
-    with (
-        patch("app.api.v1.events.suggest_invitees") as mock_suggest,
-    ):
+    with (patch("app.api.v1.events.suggest_invitees") as mock_suggest,):
         from app.schemas.ai import SuggestedInvitee, SuggestInviteesResponse
 
         mock_suggest.return_value = SuggestInviteesResponse(

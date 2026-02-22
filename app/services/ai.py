@@ -163,7 +163,9 @@ Return ONLY the JSON array, no other text."""
                     name=user.name,
                     email=user.email,
                     score=float(item.get("score", 0.5)),
-                    invitation_message=item.get("invitation_message", _fallback_message(user, event)),
+                    invitation_message=item.get(
+                        "invitation_message", _fallback_message(user, event)
+                    ),
                 )
             )
     return results

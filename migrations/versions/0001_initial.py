@@ -10,6 +10,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects.postgresql import ENUM as PG_ENUM
 
 # revision identifiers, used by Alembic.
 revision: str = "0001"
@@ -17,20 +18,45 @@ down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-# create_type=False prevents op.create_table from auto-creating the enum a
-# second time; we manage creation/deletion explicitly below with checkfirst=True.
-userrole_enum = sa.Enum("ADMIN", "ORGANIZER", "MEMBER", name="userrole", create_type=False)
-eventstatus_enum = sa.Enum("DRAFT", "PUBLISHED", "CANCELLED", name="eventstatus", create_type=False)
-rsvpstatus_enum = sa.Enum(
+# create_type=False on PG_ENUM prevents op.create_table from auto-issuing
+# CREATE TYPE.  We create the types ourselves below using PL/pgSQL that
+# silently ignores duplicate_object errors, making the migration idempotent.
+userrole_enum = PG_ENUM("ADMIN", "ORGANIZER", "MEMBER", name="userrole", create_type=False)
+eventstatus_enum = PG_ENUM(
+    "DRAFT", "PUBLISHED", "CANCELLED", name="eventstatus", create_type=False
+)
+rsvpstatus_enum = PG_ENUM(
     "UPCOMING", "ATTENDING", "MAYBE", "DECLINED", name="rsvpstatus", create_type=False
 )
 
 
 def upgrade() -> None:
-    # Create enums
-    userrole_enum.create(op.get_bind(), checkfirst=True)
-    eventstatus_enum.create(op.get_bind(), checkfirst=True)
-    rsvpstatus_enum.create(op.get_bind(), checkfirst=True)
+    # Create enum types idempotently — PL/pgSQL swallows duplicate_object so
+    # re-running the migration after a partial failure is safe.
+    op.execute(
+        """
+        DO $$ BEGIN
+            CREATE TYPE userrole AS ENUM ('ADMIN', 'ORGANIZER', 'MEMBER');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+        """
+    )
+    op.execute(
+        """
+        DO $$ BEGIN
+            CREATE TYPE eventstatus AS ENUM ('DRAFT', 'PUBLISHED', 'CANCELLED');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+        """
+    )
+    op.execute(
+        """
+        DO $$ BEGIN
+            CREATE TYPE rsvpstatus AS ENUM ('UPCOMING', 'ATTENDING', 'MAYBE', 'DECLINED');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$
+        """
+    )
 
     # users table
     op.create_table(
@@ -155,6 +181,6 @@ def downgrade() -> None:
     op.drop_table("events")
     op.drop_table("users")
 
-    rsvpstatus_enum.drop(op.get_bind(), checkfirst=True)
-    eventstatus_enum.drop(op.get_bind(), checkfirst=True)
-    userrole_enum.drop(op.get_bind(), checkfirst=True)
+    op.execute("DROP TYPE IF EXISTS rsvpstatus")
+    op.execute("DROP TYPE IF EXISTS eventstatus")
+    op.execute("DROP TYPE IF EXISTS userrole")

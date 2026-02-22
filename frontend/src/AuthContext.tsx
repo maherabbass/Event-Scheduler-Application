@@ -45,9 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(
     async (newToken: string) => {
-      setLoading(true)
       await fetchUser(newToken)
-      setLoading(false)
     },
     [fetchUser],
   )

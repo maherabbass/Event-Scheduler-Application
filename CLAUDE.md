@@ -35,7 +35,7 @@ This file is the single source of truth.
 - React 18
 - Vite
 - TypeScript
-- Netlify deployment
+- Vercel deployment
 
 ### AI
 
@@ -73,7 +73,7 @@ Users can:
 Deployment target:
 
 - Cloud Run (backend)
-- Netlify (frontend)
+- Vercel (frontend)
 
 ---
 
@@ -108,7 +108,7 @@ Copy these exactly from the Library project:
 - `app/api/v1/__init__.py`
 - `frontend/src/main.tsx`
 - `frontend/package.json`
-- `frontend/netlify.toml`
+- `frontend/vercel.json`
 - `frontend/tsconfig.json`
 - `frontend/vite-env.d.ts`
 
@@ -347,7 +347,7 @@ Same infrastructure pattern as Library project:
 - Cloud SQL
 - Artifact Registry
 - Workload Identity Federation
-- Netlify
+- Vercel
 
 Required secrets:
 
@@ -364,8 +364,9 @@ Required secrets:
 | `FRONTEND_URL` | CORS + redirects |
 | `BACKEND_URL` | Frontend API target |
 | `OPENAI_API_KEY` | AI features (optional) |
-| `NETLIFY_AUTH_TOKEN` | Frontend deploy |
-| `NETLIFY_SITE_ID` | Frontend deploy |
+| `VERCEL_TOKEN` | Frontend deploy |
+| `VERCEL_ORG_ID` | Frontend deploy |
+| `VERCEL_PROJECT_ID` | Frontend deploy |
 | `VITE_API_URL` | Frontend env var |
 
 OAuth callback URLs must be updated for the new backend service.

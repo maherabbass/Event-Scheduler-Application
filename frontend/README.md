@@ -2,7 +2,7 @@
 
 React 18 + Vite + TypeScript frontend for the Event Scheduler Application.
 
-**Live URL**: Deployed to Netlify via GitHub Actions on every push to `main`.
+**Live URL**: Deployed to Vercel via GitHub Actions on every push to `main`.
 
 ---
 
@@ -44,7 +44,7 @@ npm run preview # Serve the production build locally
 
 For local dev, no `.env` file is needed — the proxy handles API routing.
 
-For production builds (Netlify), set as a build-time environment variable in the Netlify dashboard:
+For production builds (Vercel), set as a build-time environment variable in the Vercel dashboard:
 
 | Variable | Description |
 |---|---|
@@ -95,15 +95,15 @@ frontend/src/
 
 ---
 
-## Deployment (Netlify)
+## Deployment (Vercel)
 
 Triggered automatically by `.github/workflows/deploy-frontend.yml` on push to `main`.
 
 Manual deploy:
 ```bash
 npm run build
-# Upload dist/ to Netlify, or use Netlify CLI:
-netlify deploy --prod --dir=dist
+# Upload dist/ to Vercel, or use Vercel CLI:
+vercel --prod
 ```
 
-The `netlify.toml` and `public/_redirects` both configure SPA fallback routing so deep links work on refresh.
+The `vercel.json` configures SPA fallback routing so deep links work on refresh.

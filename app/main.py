@@ -105,8 +105,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Session middleware (OAuth)
-app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
+# Session middleware (OAuth state storage).
+# https_only=True sets the Secure flag on the session cookie, which is required
+# on Cloud Run (HTTPS-only) so browsers send the cookie back on the OAuth callback.
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.SECRET_KEY,
+    https_only=settings.APP_ENV == "production",
+    same_site="lax",
+)
 
 # Routers
 app.include_router(health_router)

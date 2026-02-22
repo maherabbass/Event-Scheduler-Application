@@ -16,4 +16,4 @@ COPY alembic.ini .
 EXPOSE 8080
 
 # Use shell form so ${PORT:-8080} is expanded at container startup
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080} --workers 1"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080} --workers 1 --proxy-headers --forwarded-allow-ips='*'"]

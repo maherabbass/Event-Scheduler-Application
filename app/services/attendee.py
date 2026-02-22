@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -7,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.event_attendee import EventAttendee, RSVPStatus
 from app.models.user import User
 from app.schemas.attendee import AttendeeResponse
+
+logger = logging.getLogger(__name__)
 
 
 async def upsert_rsvp(
@@ -30,6 +33,7 @@ async def upsert_rsvp(
         existing.responded_at = now
         await db.commit()
         await db.refresh(existing)
+        logger.debug("RSVP updated: event=%s user=%s status=%s", event_id, user_id, status)
         return existing
     else:
         attendee = EventAttendee(
@@ -42,6 +46,7 @@ async def upsert_rsvp(
         db.add(attendee)
         await db.commit()
         await db.refresh(attendee)
+        logger.debug("RSVP created: event=%s user=%s status=%s", event_id, user_id, status)
         return attendee
 
 

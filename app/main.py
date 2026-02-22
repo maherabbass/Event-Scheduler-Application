@@ -1,3 +1,4 @@
+import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -15,6 +16,8 @@ from app.api.v1.health import router as health_router
 from app.api.v1.invitations import router as invitations_router
 from app.core.config import settings
 from app.core.logging import setup_logging
+
+logger = logging.getLogger(__name__)
 
 _TAG_METADATA: list[dict[str, Any]] = [
     {
@@ -125,6 +128,7 @@ app.include_router(admin_router)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error"},

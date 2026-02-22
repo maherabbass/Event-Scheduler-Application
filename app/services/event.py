@@ -1,3 +1,4 @@
+import logging
 import math
 import uuid
 from datetime import datetime
@@ -10,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.event import Event, EventStatus
 from app.models.user import User, UserRole
 from app.schemas.event import EventCreate, EventListResponse, EventResponse, EventUpdate
+
+logger = logging.getLogger(__name__)
 
 
 async def list_events(
@@ -117,6 +120,7 @@ async def create_event(db: AsyncSession, data: EventCreate, user_id: uuid.UUID) 
     db.add(event)
     await db.commit()
     await db.refresh(event)
+    logger.info("Event created: id=%s title=%r user=%s", event.id, event.title, user_id)
     return event
 
 
@@ -127,6 +131,7 @@ async def update_event(
 
     # Ownership check: ORGANIZER can only edit their own events
     if user.role == UserRole.ORGANIZER and event.created_by != user.id:
+        logger.warning("Forbidden update attempt: user=%s event=%s", user.id, event_id)
         raise HTTPException(status_code=403, detail="Cannot modify another organizer's event")
 
     for field, value in data.model_dump(exclude_unset=True).items():
@@ -134,6 +139,7 @@ async def update_event(
 
     await db.commit()
     await db.refresh(event)
+    logger.info("Event updated: id=%s user=%s", event_id, user.id)
     return event
 
 
@@ -142,7 +148,9 @@ async def delete_event(db: AsyncSession, event_id: uuid.UUID, user: User) -> Non
 
     # Ownership check: ORGANIZER can only delete their own events
     if user.role == UserRole.ORGANIZER and event.created_by != user.id:
+        logger.warning("Forbidden delete attempt: user=%s event=%s", user.id, event_id)
         raise HTTPException(status_code=403, detail="Cannot delete another organizer's event")
 
     await db.delete(event)
     await db.commit()
+    logger.info("Event deleted: id=%s user=%s", event_id, user.id)

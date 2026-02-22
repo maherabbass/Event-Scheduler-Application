@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import logging
 import secrets
 import time
 
@@ -16,6 +17,8 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.user import TokenResponse, UserResponse
 from app.services.user import get_or_create_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -52,9 +55,7 @@ def _verify_signed_state(state: str, max_age: int = 600) -> bool:
         if len(parts) != 2:
             return False
         raw, sig = parts
-        expected = hmac.new(
-            settings.SECRET_KEY.encode(), raw.encode(), hashlib.sha256
-        ).hexdigest()
+        expected = hmac.new(settings.SECRET_KEY.encode(), raw.encode(), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(sig, expected):
             return False
         # raw = nonce.ts
@@ -82,6 +83,7 @@ async def login(provider: str, request: Request) -> None:
         )
     state = _make_signed_state()
     redirect_uri = f"{settings.BACKEND_URL}/api/v1/auth/callback/{provider}"
+    logger.info("OAuth login initiated: provider=%s", provider)
     client = oauth.create_client(provider)
     # authorize_redirect also stores state in the session cookie.  That still
     # works when cookies are available (local dev); on Cloud Run we fall back
@@ -114,16 +116,19 @@ async def callback(
     # --- 1. Validate state (HMAC, no session required) ---------------------
     state = request.query_params.get("state", "")
     if not _verify_signed_state(state):
+        logger.warning("OAuth state validation failed: provider=%s", provider)
         raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
 
     code = request.query_params.get("code")
     if not code:
+        logger.warning("OAuth callback missing code: provider=%s", provider)
         raise HTTPException(status_code=400, detail="Missing authorization code")
 
     redirect_uri = f"{settings.BACKEND_URL}/api/v1/auth/callback/{provider}"
 
     # --- 2. Exchange code for token + fetch user info (direct httpx calls) -
     # Bypasses authlib's session-based state check entirely.
+    logger.debug("OAuth callback: exchanging code for token, provider=%s", provider)
     async with httpx.AsyncClient() as http:
         if provider == "google":
             token_resp = await http.post(
@@ -195,9 +200,7 @@ async def callback(
                     None,
                 )
                 if primary is None:
-                    primary = next(
-                        (e["email"] for e in emails if e.get("verified")), None
-                    )
+                    primary = next((e["email"] for e in emails if e.get("verified")), None)
                 if primary is None:
                     raise HTTPException(
                         status_code=400,
@@ -208,6 +211,7 @@ async def callback(
     user = await get_or_create_user(db, email=email, name=name, provider=provider, subject=subject)
     access_token = create_access_token({"sub": str(user.id)})
 
+    logger.info("OAuth login successful: provider=%s user=%s", provider, email)
     if settings.FRONTEND_URL:
         return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/callback?token={access_token}")
     return TokenResponse(access_token=access_token)

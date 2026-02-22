@@ -1,3 +1,4 @@
+import logging
 import secrets
 import uuid
 from datetime import datetime, timezone
@@ -8,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.event_attendee import EventAttendee, RSVPStatus
 from app.models.invitation import Invitation
+
+logger = logging.getLogger(__name__)
 
 
 async def create_invitation(
@@ -24,6 +27,7 @@ async def create_invitation(
         )
     )
     if existing:
+        logger.warning("Duplicate invitation: event=%s email=%s", event_id, invited_email)
         raise HTTPException(
             status_code=409,
             detail=f"Invitation already sent to {invited_email} for this event",
@@ -40,6 +44,7 @@ async def create_invitation(
     db.add(invitation)
     await db.commit()
     await db.refresh(invitation)
+    logger.info("Invitation created: event=%s email=%s by=%s", event_id, invited_email, invited_by)
     return invitation
 
 
@@ -76,4 +81,10 @@ async def accept_invitation(db: AsyncSession, token: str) -> dict:
     invitation.accepted = True
     await db.commit()
 
+    logger.info(
+        "Invitation accepted: event=%s email=%s user_registered=%s",
+        invitation.event_id,
+        invitation.invited_email,
+        user is not None,
+    )
     return {"message": "Invitation accepted successfully", "event_id": str(invitation.event_id)}

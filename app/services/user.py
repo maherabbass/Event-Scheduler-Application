@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from fastapi import HTTPException
@@ -5,6 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User, UserRole
+
+logger = logging.getLogger(__name__)
 
 
 async def get_or_create_user(
@@ -32,6 +35,7 @@ async def get_or_create_user(
         db.add(user)
         await db.commit()
         await db.refresh(user)
+        logger.info("New user created: email=%s provider=%s", email, provider)
     return user
 
 
@@ -44,7 +48,9 @@ async def update_user_role(db: AsyncSession, user_id: uuid.UUID, role: UserRole)
     user = await db.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
+    old_role = user.role
     user.role = role
     await db.commit()
     await db.refresh(user)
+    logger.info("User role changed: user=%s %s -> %s", user_id, old_role, role)
     return user

@@ -5,9 +5,9 @@ A full-stack event management platform built with **FastAPI**, **PostgreSQL**, a
 Users can create events, RSVP, invite others by email, and get AI-powered invitation suggestions — all secured with Google and GitHub OAuth.
 
 **Live URLs**
-- Backend API: https://event-scheduler-api-ew.a.run.app
+- Backend API: https://event-scheduler-api-285968098233.europe-west1.run.app
 - Frontend: https://event-scheduler-application.vercel.app
-- API docs: https://event-scheduler-api-ew.a.run.app/docs
+- API docs: https://event-scheduler-api-285968098233.europe-west1.run.app/docs
 
 ---
 

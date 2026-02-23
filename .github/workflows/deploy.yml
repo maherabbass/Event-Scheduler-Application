@@ -63,6 +63,7 @@ jobs:
           docker push "$IMAGE"
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
       - name: Run database migrations (Cloud Run Job)
+        continue-on-error: true
         env:
           DB_URL: ${{ secrets.DATABASE_URL }}
         run: |

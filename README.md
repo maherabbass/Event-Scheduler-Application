@@ -23,6 +23,13 @@ Users can create events, RSVP, invite others by email, and get AI-powered invita
 
 ---
 
+## How to Test Quickly
+1. Open the frontend link.
+2. Login using Google.
+3. Create a new event.
+4. RSVP to an event.
+5. Search events by keyword.
+
 ## Local Setup
 
 ### Prerequisites

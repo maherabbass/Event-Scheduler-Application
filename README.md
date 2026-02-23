@@ -5,9 +5,9 @@ A full-stack event management platform built with **FastAPI**, **PostgreSQL**, a
 Users can create events, RSVP, invite others by email, and get AI-powered invitation suggestions — all secured with Google and GitHub OAuth.
 
 **Live URLs**
-- Backend API: Cloud Run (configured in `.github/workflows/deploy.yml`)
-- Frontend: Netlify (configured in `.github/workflows/deploy-frontend.yml`)
-- API docs: `<BACKEND_URL>/docs`
+- Backend API: https://event-scheduler-api-ew.a.run.app
+- Frontend: https://event-scheduler-application.vercel.app
+- API docs: https://event-scheduler-api-ew.a.run.app/docs
 
 ---
 
@@ -19,7 +19,7 @@ Users can create events, RSVP, invite others by email, and get AI-powered invita
 | Auth | JWT, Google OAuth, GitHub OAuth |
 | AI | OpenAI `gpt-4o-mini` with deterministic fallback |
 | Frontend | React 18, Vite, TypeScript |
-| Deployment | Cloud Run (backend), Netlify (frontend) |
+| Deployment | Cloud Run (backend), Vercel (frontend) |
 
 ---
 
@@ -155,7 +155,7 @@ Register your OAuth apps with the callback URL:
 Infrastructure mirrors the [Library Management System](https://github.com/maherabbass/Library-Management-System) project:
 
 - **Backend**: Cloud Run + Cloud SQL (PostgreSQL) + Artifact Registry
-- **Frontend**: Netlify
+- **Frontend**: Vercel
 - **Auth**: Workload Identity Federation (keyless GCP auth from GitHub Actions)
 
 Push to `main` triggers both pipelines automatically.
@@ -166,8 +166,8 @@ Push to `main` triggers both pipelines automatically.
 WIF_PROVIDER          GCP_SERVICE_ACCOUNT    DATABASE_URL
 SECRET_KEY            GOOGLE_CLIENT_ID       GOOGLE_CLIENT_SECRET
 GH_CLIENT_ID          GH_CLIENT_SECRET       FRONTEND_URL
-BACKEND_URL           OPENAI_API_KEY         NETLIFY_AUTH_TOKEN
-NETLIFY_SITE_ID       VITE_API_URL
+BACKEND_URL           OPENAI_API_KEY         VERCEL_TOKEN
+VERCEL_ORG_ID         VERCEL_PROJECT_ID      VITE_API_URL
 ```
 
 ---

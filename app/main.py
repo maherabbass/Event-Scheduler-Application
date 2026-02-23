@@ -28,7 +28,9 @@ _TAG_METADATA: list[dict[str, Any]] = [
         "name": "auth",
         "description": (
             "OAuth 2.0 SSO login via **Google** or **GitHub**.\n\n"
-            "The callback endpoint issues a short-lived **JWT Bearer token**. "
+            "After completing the login flow, open your browser Developer Tools → "
+            "Application → Local Storage and copy the value stored under "
+            "`access_token`.\n\n"
             "Pass it in every protected request:\n\n"
             "```\nAuthorization: Bearer <token>\n```"
         ),
